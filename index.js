@@ -139,30 +139,26 @@ function init_ring_images() {
   ringImages.length = 0;
   for (let i = 0;i < MIN_IMAGES; i++) {
     const url = AVAILABLE_IMAGES[i % AVAILABLE_IMAGES.length];
-    let radius = 0;
-    const rand = Math.random();
-    if (rand < 0.15) {
-      radius = 0.9 + Math.random() * 0.25;
-    } else if (rand < 0.7) {
-      radius = 1.3 + Math.random() * 0.8;
-    } else {
-      radius = 2.3 + Math.random() * 0.65;
-    }
-    const baseAngle = Math.random() * Math.PI * 2;
-    const yOffset = (Math.random() - 0.5) * 0.55;
-    const baseSpeed = 0.35;
-    const speed = baseSpeed / Math.pow(radius, 1.5);
+    const originalX = i / MIN_IMAGES * 24 - 12;
+    const originalZ = 1.5 + Math.random() * 4;
+    const actualZ = originalZ + Z_OFFSET;
+    const projectedY = (Math.random() - 0.5) * 2 * 0.95;
+    const originalY = projectedY * actualZ / FOCAL_LENGTH;
+    const speed = 0.8 + Math.random() * 0.4;
     ringImages.push({
       url,
       thumbUrl: get_thumbnail_url(url),
-      angle: baseAngle,
-      baseAngle,
-      radius,
-      yOffset,
+      originalX,
+      originalY,
+      originalZ,
       speed,
       x: 0,
       y: 0,
-      z: 0
+      z: 0,
+      angle: 0,
+      baseAngle: 0,
+      radius: 0,
+      yOffset: originalY
     });
   }
 }
@@ -179,18 +175,17 @@ function screen({ x, y }) {
   const scale = get_base_scale();
   return {
     x: canvas.width / 2 + x * scale,
-    y: canvas.height / 2 - y * scale
+    y: canvas.height / 2 - y * (canvas.height / 2)
   };
 }
-var cameraTiltX = 0;
-var cameraYaw = 0;
-var targetTiltX = 0;
-var targetYaw = 0;
+var scrollOffset = 0;
+var scrollVelocity = 0;
+var AUTO_SCROLL_SPEED = 0.8;
 var isDragging = false;
 var startX = 0;
 var startY = 0;
-var lastMoveTime = 0;
-var velocityYaw = 0;
+var lastDragX = 0;
+var lastDragTime = 0;
 var activeModal = null;
 function show_modal(thumbUrl, fullUrl) {
   if (activeModal)
@@ -233,7 +228,9 @@ function show_modal(thumbUrl, fullUrl) {
       activeModal = null;
     }, 300);
   };
-  modal.addEventListener("click", close);
+  setTimeout(() => {
+    modal.addEventListener("click", close);
+  }, 100);
   const handleKeyDown = (e) => {
     if (e.key === "Escape") {
       close();
@@ -243,16 +240,20 @@ function show_modal(thumbUrl, fullUrl) {
   window.addEventListener("keydown", handleKeyDown);
   activeModal = modal;
 }
+function get_image_dimensions(z, scale, aspectRatio) {
+  const width = BASE_IMG_SIZE * FOCAL_LENGTH * scale / z * 2.5;
+  const height = width * aspectRatio;
+  return { width, height };
+}
 function handle_click(mx, my) {
   const scale = get_base_scale();
   const sortedNearToFar = [...ringImages].sort((a, b) => a.z - b.z);
   for (const v of sortedNearToFar) {
     const proj = project(v);
     const pos = screen(proj);
-    const targetWidth = BASE_IMG_SIZE * FOCAL_LENGTH * scale / v.z * 0.8;
     const img = imgCache[v.thumbUrl];
     const aspectRatio = img ? img.naturalHeight / img.naturalWidth : 0.75;
-    const targetHeight = targetWidth * aspectRatio;
+    const { width: targetWidth, height: targetHeight } = get_image_dimensions(v.z, scale, aspectRatio);
     if (mx >= pos.x - targetWidth / 2 && mx <= pos.x + targetWidth / 2 && my >= pos.y - targetHeight / 2 && my <= pos.y + targetHeight / 2) {
       show_modal(v.thumbUrl, v.url);
       break;
@@ -263,25 +264,26 @@ canvas.addEventListener("mousedown", (e) => {
   isDragging = true;
   startX = e.clientX;
   startY = e.clientY;
-  lastMoveTime = performance.now();
-  velocityYaw = 0;
+  lastDragX = e.clientX;
+  lastDragTime = performance.now();
+  scrollVelocity = 0;
 });
 window.addEventListener("mousemove", (e) => {
   if (!isDragging)
     return;
-  const dx = e.clientX - startX;
-  const dy = e.clientY - startY;
-  targetYaw += dx * 0.005;
-  targetTiltX -= dy * 0.005;
-  targetTiltX = Math.max(-85 * Math.PI / 180, Math.min(85 * Math.PI / 180, targetTiltX));
+  const currentX = e.clientX;
+  const dx = currentX - lastDragX;
+  lastDragX = currentX;
+  const scale = get_base_scale();
+  const referenceZ = 3.5;
+  const deltaX = dx * referenceZ / (FOCAL_LENGTH * scale);
+  scrollOffset -= deltaX;
   const now = performance.now();
-  const dt = now - lastMoveTime;
+  const dt = (now - lastDragTime) / 1000;
   if (dt > 0) {
-    velocityYaw = dx * 0.005 / (dt / 1000);
+    scrollVelocity = -deltaX / dt;
   }
-  startX = e.clientX;
-  startY = e.clientY;
-  lastMoveTime = now;
+  lastDragTime = now;
 });
 window.addEventListener("mouseup", (e) => {
   if (isDragging) {
@@ -297,26 +299,27 @@ canvas.addEventListener("touchstart", (e) => {
     isDragging = true;
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
-    lastMoveTime = performance.now();
-    velocityYaw = 0;
+    lastDragX = e.touches[0].clientX;
+    lastDragTime = performance.now();
+    scrollVelocity = 0;
   }
 });
 window.addEventListener("touchmove", (e) => {
   if (!isDragging || e.touches.length !== 1)
     return;
-  const dx = e.touches[0].clientX - startX;
-  const dy = e.touches[0].clientY - startY;
-  targetYaw += dx * 0.005;
-  targetTiltX -= dy * 0.005;
-  targetTiltX = Math.max(-85 * Math.PI / 180, Math.min(85 * Math.PI / 180, targetTiltX));
+  const currentX = e.touches[0].clientX;
+  const dx = currentX - lastDragX;
+  lastDragX = currentX;
+  const scale = get_base_scale();
+  const referenceZ = 3.5;
+  const deltaX = dx * referenceZ / (FOCAL_LENGTH * scale);
+  scrollOffset -= deltaX;
   const now = performance.now();
-  const dt = now - lastMoveTime;
+  const dt = (now - lastDragTime) / 1000;
   if (dt > 0) {
-    velocityYaw = dx * 0.005 / (dt / 1000);
+    scrollVelocity = -deltaX / dt;
   }
-  startX = e.touches[0].clientX;
-  startY = e.touches[0].clientY;
-  lastMoveTime = now;
+  lastDragTime = now;
 });
 window.addEventListener("touchend", (e) => {
   if (isDragging && e.changedTouches.length === 1) {
@@ -332,9 +335,8 @@ function draw_ring_image(ringImg) {
   const proj = project(ringImg);
   const pos = screen(proj);
   const scale = get_base_scale();
-  const targetWidth = BASE_IMG_SIZE * FOCAL_LENGTH * scale / ringImg.z * 0.8;
   const aspectRatio = img ? img.naturalHeight / img.naturalWidth : 0.75;
-  const targetHeight = targetWidth * aspectRatio;
+  const { width: targetWidth, height: targetHeight } = get_image_dimensions(ringImg.z, scale, aspectRatio);
   if (pos.x + targetWidth / 2 < 0 || pos.x - targetWidth / 2 > canvas.width || pos.y + targetHeight / 2 < 0 || pos.y - targetHeight / 2 > canvas.height) {
     return;
   }
@@ -349,14 +351,13 @@ var lastTime = performance.now();
 function frame(now) {
   const dt = (now - lastTime) / 1000;
   lastTime = now;
-  cameraTiltX += (targetTiltX - cameraTiltX) * 0.1;
-  cameraYaw += (targetYaw - cameraYaw) * 0.1;
   if (!isDragging) {
-    if (Math.abs(velocityYaw) > 0.01) {
-      targetYaw += velocityYaw * dt;
-      velocityYaw *= Math.exp(-2.5 * dt);
+    if (Math.abs(scrollVelocity) > 0.01) {
+      scrollOffset += scrollVelocity * dt;
+      scrollVelocity *= Math.exp(-3 * dt);
     } else {
-      targetYaw += 0.03 * dt;
+      const speedMultiplier = 1 + 0.75 * Math.sin(now * 0.0008) * Math.cos(now * 0.0003);
+      scrollOffset += AUTO_SCROLL_SPEED * speedMultiplier * dt;
     }
   }
   clear();
@@ -364,19 +365,20 @@ function frame(now) {
     draw_star(star.x, star.y, star.radius, star.color);
   }
   for (const v of ringImages) {
-    v.angle = v.baseAngle + now * 0.001 * v.speed;
-    const rx = v.radius * Math.cos(v.angle);
-    const rz = v.radius * Math.sin(v.angle);
-    const ry = v.yOffset;
-    const x1 = rx * Math.cos(cameraYaw) - rz * Math.sin(cameraYaw);
-    const z1 = rx * Math.sin(cameraYaw) + rz * Math.cos(cameraYaw);
-    const y1 = ry;
-    const x2 = x1;
-    const y2 = y1 * Math.cos(cameraTiltX) - z1 * Math.sin(cameraTiltX);
-    const z2 = y1 * Math.sin(cameraTiltX) + z1 * Math.cos(cameraTiltX);
-    v.x = x2;
-    v.y = y2;
-    v.z = z2 + Z_OFFSET;
+    const isBackground = v.originalZ > 3.5;
+    let x = 0;
+    if (isBackground) {
+      x = (v.originalX + scrollOffset) % 24;
+    } else {
+      x = (v.originalX - scrollOffset) % 24;
+    }
+    if (x < -12)
+      x += 24;
+    if (x > 12)
+      x -= 24;
+    v.x = x;
+    v.y = v.originalY;
+    v.z = v.originalZ + Z_OFFSET;
   }
   const sortedImages = [...ringImages].sort((a, b) => b.z - a.z);
   for (const v of sortedImages) {
@@ -384,51 +386,6 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-function start_gallery() {
-  create_stars();
-  init_ring_images();
-  requestAnimationFrame(frame);
-}
-var correctPasscode = "120323";
-var authOverlay = document.getElementById("auth-overlay");
-var authInput = document.getElementById("auth-input");
-var authSubmit = document.getElementById("auth-submit");
-var authError = document.getElementById("auth-error");
-function check_authentication() {
-  if (sessionStorage.getItem("gallery_authenticated") === "true") {
-    if (authOverlay)
-      authOverlay.classList.add("hidden");
-    start_gallery();
-  } else {
-    if (authSubmit && authInput) {
-      const verify = () => {
-        if (authInput.value === correctPasscode) {
-          sessionStorage.setItem("gallery_authenticated", "true");
-          if (authOverlay) {
-            authOverlay.classList.add("hidden");
-          }
-          start_gallery();
-        } else {
-          if (authError) {
-            authError.style.display = "block";
-            authError.style.animation = "none";
-            authError.offsetWidth;
-            authError.style.animation = "shake 0.3s ease";
-          }
-          authInput.value = "";
-          authInput.focus();
-        }
-      };
-      authSubmit.addEventListener("click", verify);
-      authInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          verify();
-        }
-      });
-      setTimeout(() => authInput.focus(), 100);
-    } else {
-      start_gallery();
-    }
-  }
-}
-check_authentication();
+create_stars();
+init_ring_images();
+requestAnimationFrame(frame);
