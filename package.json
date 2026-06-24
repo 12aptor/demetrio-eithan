@@ -1,0 +1,16 @@
+{
+  "name": "fotos-infinitas",
+  "version": "1.0.0",
+  "description": "Infinite photos slideshow schooling physics simulation",
+  "type": "module",
+  "scripts": {
+    "start": "bun run server.ts",
+    "build": "bun build ./index.ts --outfile=./index.js",
+    "watch": "bun build ./index.ts --outfile=./index.js --watch",
+    "generate": "bun run generate_thumbnails.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "sharp": "^0.35.2"
+  }
+}
