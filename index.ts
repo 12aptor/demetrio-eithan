@@ -197,7 +197,8 @@ function init_ring_images() {
     for (let i = 0; i < MIN_IMAGES; i++) {
         const url = AVAILABLE_IMAGES[i % AVAILABLE_IMAGES.length];
 
-        const originalX = ((i / MIN_IMAGES) * 24) - 12;
+        // Spaced out horizontally: spread positions from -24 to 24 (width of 48 units) - balanced middle ground
+        const originalX = ((i / MIN_IMAGES) * 48) - 24;
         const originalZ = 1.5 + Math.random() * 4.0;
         const actualZ = originalZ + Z_OFFSET;
 
@@ -480,13 +481,16 @@ function frame(now: number) {
         const isBackground = v.originalZ > 3.5;
         let x = 0;
         if (isBackground) {
-            x = (v.originalX + scrollOffset) % 24;
+            // Background scrolls left-to-right (opposite direction)
+            x = (v.originalX + scrollOffset) % 48;
         } else {
-            x = (v.originalX - scrollOffset) % 24;
+            // Foreground scrolls right-to-left
+            x = (v.originalX - scrollOffset) % 48;
         }
 
-        if (x < -12) x += 24;
-        if (x > 12) x -= 24;
+        // Wrap around when off-screen on a width of 48 units (-24 to 24)
+        if (x < -24) x += 48;
+        if (x > 24) x -= 48;
 
         v.x = x;
         v.y = v.originalY;

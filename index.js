@@ -139,7 +139,7 @@ function init_ring_images() {
   ringImages.length = 0;
   for (let i = 0;i < MIN_IMAGES; i++) {
     const url = AVAILABLE_IMAGES[i % AVAILABLE_IMAGES.length];
-    const originalX = i / MIN_IMAGES * 24 - 12;
+    const originalX = i / MIN_IMAGES * 48 - 24;
     const originalZ = 1.5 + Math.random() * 4;
     const actualZ = originalZ + Z_OFFSET;
     const projectedY = (Math.random() - 0.5) * 2 * 0.95;
@@ -370,14 +370,14 @@ function frame(now) {
     const isBackground = v.originalZ > 3.5;
     let x = 0;
     if (isBackground) {
-      x = (v.originalX + scrollOffset) % 24;
+      x = (v.originalX + scrollOffset) % 48;
     } else {
-      x = (v.originalX - scrollOffset) % 24;
+      x = (v.originalX - scrollOffset) % 48;
     }
-    if (x < -12)
-      x += 24;
-    if (x > 12)
-      x -= 24;
+    if (x < -24)
+      x += 48;
+    if (x > 24)
+      x -= 48;
     v.x = x;
     v.y = v.originalY;
     v.z = v.originalZ + Z_OFFSET;
