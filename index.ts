@@ -321,7 +321,9 @@ function show_modal(thumbUrl: string, fullUrl: string) {
 }
 
 function get_image_dimensions(z: number, scale: number, aspectRatio: number): { width: number, height: number } {
-    const width = ((BASE_IMG_SIZE * FOCAL_LENGTH * scale) / z) * 2.5;
+    const isMobile = canvas.width < 768;
+    const multiplier = isMobile ? 5.0 : 2.5; // Twice the size on mobile
+    const width = ((BASE_IMG_SIZE * FOCAL_LENGTH * scale) / z) * multiplier;
     const height = width * aspectRatio;
     return { width, height };
 }

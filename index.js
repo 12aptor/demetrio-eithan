@@ -241,7 +241,9 @@ function show_modal(thumbUrl, fullUrl) {
   activeModal = modal;
 }
 function get_image_dimensions(z, scale, aspectRatio) {
-  const width = BASE_IMG_SIZE * FOCAL_LENGTH * scale / z * 2.5;
+  const isMobile = canvas.width < 768;
+  const multiplier = isMobile ? 5 : 2.5;
+  const width = BASE_IMG_SIZE * FOCAL_LENGTH * scale / z * multiplier;
   const height = width * aspectRatio;
   return { width, height };
 }
